@@ -5,8 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const Groq = require('groq-sdk');
 const nodemailer = require('nodemailer');
-const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium');
+const PDFDocument = require('pdfkit');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -136,35 +135,150 @@ Return ONLY a valid JSON object (no markdown, no backticks) with these exact fie
 });
 
 // ─────────────────────────────────────────────
-// Download PDF
+// Download PDF  (pure-JS PDFKit — zero native deps)
 // ─────────────────────────────────────────────
 app.post('/api/download-pdf', async (req, res) => {
   try {
-    const { html } = req.body;
-    if (!html) return res.status(400).json({ error: 'No HTML provided.' });
+    const { certId } = req.body;
+    const cert = certId ? certificateStore.get(certId) : null;
 
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-    });
+    // Fallback data if cert not found in store
+    const recipientName  = cert?.recipientName  || req.body.recipientName  || 'Recipient';
+    const courseName     = cert?.courseName     || req.body.courseName     || 'Course';
+    const instructorName = cert?.instructorName || req.body.instructorName || 'Instructor';
+    const completionDate = cert?.completionDate || req.body.completionDate ||
+      new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const aiData         = cert?.aiData         || req.body.aiData         || {};
+    const shortId        = cert ? cert.id.slice(0, 8).toUpperCase() : 'XXXXXXXX';
+    const verifyUrl      = cert?.verifyUrl      || '';
 
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const theme = aiData.theme || {};
+    const accentHex  = theme.accentColor  || '#c9a84c';
+    const primaryHex = theme.primaryColor || '#1a1a2e';
+    const score      = aiData.validation?.credentialScore || 90;
+    const themeName  = theme.name || 'Classic';
 
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      landscape: true,
-      printBackground: true,
-      margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
-    });
+    // Convert hex to 0-1 RGB for PDFKit
+    const hex2rgb = h => {
+      const c = h.replace('#','');
+      return [
+        parseInt(c.substring(0,2),16)/255,
+        parseInt(c.substring(2,4),16)/255,
+        parseInt(c.substring(4,6),16)/255
+      ];
+    };
+    const accent  = hex2rgb(accentHex);
+    const primary = hex2rgb(primaryHex);
 
-    await browser.close();
+    // Generate QR PNG buffer for embedding
+    let qrBuffer = null;
+    if (verifyUrl) {
+      qrBuffer = await QRCode.toBuffer(verifyUrl, { width: 100, margin: 1 });
+    }
 
+    // A4 landscape: 841.89 x 595.28 pt
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 0 });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="certificate.pdf"');
-    res.send(pdfBuffer);
+    res.setHeader('Content-Disposition', `attachment; filename="certificate-${shortId}.pdf"`);
+    doc.pipe(res);
+
+    const W = 841.89, H = 595.28;
+    const pad = 40;
+
+    // Background
+    doc.rect(0, 0, W, H).fill('#fdfbf0');
+
+    // Outer border
+    doc.rect(pad, pad, W - pad*2, H - pad*2)
+       .lineWidth(4).strokeColor(accentHex).stroke();
+
+    // Inner border
+    doc.rect(pad + 8, pad + 8, W - (pad+8)*2, H - (pad+8)*2)
+       .lineWidth(1).strokeColor(accentHex).stroke();
+
+    // Corner accents
+    const cs = 24; // corner size
+    [[pad+2, pad+2], [W-pad-2-cs, pad+2], [pad+2, H-pad-2-cs], [W-pad-2-cs, H-pad-2-cs]].forEach(([x, y]) => {
+      doc.rect(x, y, cs, cs).fill(accentHex);
+    });
+
+    // Theme badge top-right
+    doc.rect(W - pad - 160, pad + 16, 140, 22).fill(accentHex);
+    doc.fontSize(8).fillColor('#ffffff').font('Helvetica-Bold')
+       .text(themeName.toUpperCase(), W - pad - 158, pad + 22, { width: 136, align: 'center' });
+
+    // Org name
+    doc.fontSize(10).fillColor(accentHex).font('Helvetica-Bold')
+       .text('AI CERTIFICATE GENERATOR', 0, pad + 28, { width: W, align: 'center', characterSpacing: 4 });
+
+    // Divider line
+    const divY = pad + 52;
+    doc.moveTo(W/2 - 100, divY).lineTo(W/2 + 100, divY)
+       .lineWidth(1).strokeColor(accentHex).stroke();
+
+    // Main title
+    doc.fontSize(32).fillColor(primaryHex).font('Helvetica-Bold')
+       .text(aiData.headline || 'Certificate of Achievement', 0, divY + 10, { width: W, align: 'center' });
+
+    // Subtitle
+    doc.fontSize(9).fillColor('#888888').font('Helvetica')
+       .text('EXCELLENCE  ·  KNOWLEDGE  ·  ACHIEVEMENT', 0, divY + 52, { width: W, align: 'center', characterSpacing: 3 });
+
+    // Presented to
+    doc.fontSize(11).fillColor('#555555').font('Helvetica')
+       .text('This certificate is proudly presented to', 0, divY + 76, { width: W, align: 'center' });
+
+    // Recipient name
+    doc.fontSize(40).fillColor(primaryHex).font('Helvetica-Bold')
+       .text(recipientName, 0, divY + 96, { width: W, align: 'center' });
+
+    // Underline recipient name
+    const nameY = divY + 96 + 46;
+    doc.moveTo(W/2 - 180, nameY).lineTo(W/2 + 180, nameY)
+       .lineWidth(2).strokeColor(accentHex).stroke();
+
+    // Body text
+    const bodyText = aiData.body ||
+      `This certifies that ${recipientName} has successfully completed ${courseName} with distinction.`;
+    doc.fontSize(10.5).fillColor('#333333').font('Helvetica')
+       .text(bodyText, pad + 80, nameY + 14, { width: W - (pad+80)*2, align: 'center', lineGap: 3 });
+
+    // Course name
+    doc.fontSize(16).fillColor(accentHex).font('Helvetica-BoldOblique')
+       .text(`"${courseName}"`, 0, nameY + 52, { width: W, align: 'center' });
+
+    // Tagline
+    if (aiData.tagline) {
+      doc.fontSize(9).fillColor('#aaaaaa').font('Helvetica-Oblique')
+         .text(aiData.tagline, 0, nameY + 76, { width: W, align: 'center' });
+    }
+
+    // Footer row: Instructor | Meta | QR
+    const footerY = H - pad - 72;
+    doc.moveTo(pad + 20, footerY - 6).lineTo(pad + 220, footerY - 6)
+       .lineWidth(0.5).strokeColor('#cccccc').stroke();
+
+    // Instructor
+    doc.fontSize(13).fillColor(primaryHex).font('Helvetica-Bold')
+       .text(instructorName || 'The Instructor', pad + 20, footerY, { width: 200, align: 'center' });
+    doc.fontSize(8).fillColor('#aaaaaa').font('Helvetica')
+       .text('INSTRUCTOR / ISSUER', pad + 20, footerY + 18, { width: 200, align: 'center', characterSpacing: 1 });
+
+    // Center meta
+    doc.fontSize(9).fillColor('#666666').font('Helvetica')
+       .text(`Date: ${completionDate}`, W/2 - 100, footerY, { width: 200, align: 'center' })
+       .text(`ID: ${shortId}`, W/2 - 100, footerY + 14, { width: 200, align: 'center' })
+       .text(`Credential Score: ${score}/100`, W/2 - 100, footerY + 28, { width: 200, align: 'center' });
+
+    // QR code
+    if (qrBuffer) {
+      doc.image(qrBuffer, W - pad - 110, footerY - 10, { width: 80, height: 80 });
+      doc.fontSize(7).fillColor('#aaaaaa').font('Helvetica')
+         .text('SCAN TO VERIFY', W - pad - 110, footerY + 72, { width: 80, align: 'center', characterSpacing: 1 });
+    }
+
+    doc.end();
+
   } catch (err) {
     console.error('PDF error:', err);
     res.status(500).json({ error: 'Failed to generate PDF: ' + err.message });
