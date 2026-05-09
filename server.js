@@ -343,6 +343,16 @@ app.post('/api/send-email', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// Serve Certificate HTML directly (fixes iframe blank screen)
+// ─────────────────────────────────────────────
+app.get('/cert/:certId', (req, res) => {
+  const cert = certificateStore.get(req.params.certId);
+  if (!cert) return res.status(404).send('<h2>Certificate not found</h2>');
+  res.setHeader('Content-Type', 'text/html');
+  res.send(cert.html);
+});
+
+// ─────────────────────────────────────────────
 // Verify Certificate
 // ─────────────────────────────────────────────
 app.get('/verify/:certId', (req, res) => {
