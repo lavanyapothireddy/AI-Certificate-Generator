@@ -3,7 +3,6 @@
 ────────────────────────────────────────────── */
 
 let currentCertId = null;
-let currentCertHtml = null;
 let currentVerifyUrl = null;
 
 // ─────────────────────────────────────────────
@@ -18,12 +17,12 @@ async function generateCertificate() {
 
   hideError();
 
-  if (!recipientName) { showError('Please enter the recipient\'s name.'); return; }
+  if (!recipientName) { showError("Please enter the recipient's name."); return; }
   if (!courseName)     { showError('Please enter the course or achievement name.'); return; }
 
   const btn = document.getElementById('generateBtn');
   setLoading(true, btn);
-  showOverlay('✦ AI is designing your certificate…');
+  showOverlay('AI is designing your certificate...');
 
   try {
     const res = await fetch('/api/generate', {
@@ -35,12 +34,11 @@ async function generateCertificate() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Generation failed');
 
-    currentCertId   = data.certId;
-    currentCertHtml = data.html;
+    currentCertId    = data.certId;
     currentVerifyUrl = data.verifyUrl;
 
     renderCertificate(data);
-    showToast('🎉 Certificate generated successfully!');
+    showToast('Certificate generated successfully!');
   } catch (err) {
     showError('Error: ' + err.message);
   } finally {
@@ -51,9 +49,10 @@ async function generateCertificate() {
 
 // ─────────────────────────────────────────────
 // RENDER CERTIFICATE IN IFRAME
+// Uses /cert/:id server route — fixes blank screen + Google Fonts loading
 // ─────────────────────────────────────────────
 function renderCertificate(data) {
-  const { aiData, html } = data;
+  const { aiData, certId } = data;
 
   // Show output, hide placeholder
   document.getElementById('previewPlaceholder').style.display = 'none';
@@ -61,32 +60,26 @@ function renderCertificate(data) {
 
   // AI Info Bar
   const bar = document.getElementById('aiInfoBar');
-  const score = aiData?.validation?.credentialScore || 90;
-  const themeName = aiData?.theme?.name || 'Classic';
-  bar.innerHTML = `
-    <span style="color:rgba(255,255,255,0.4);font-size:11px;letter-spacing:2px;text-transform:uppercase;">AI Generated</span>
-    <span class="ai-tag theme">🎨 ${themeName}</span>
-    <span class="ai-tag score">⭐ ${score}/100 Credential Score</span>
-    <span class="ai-tag valid">✅ Verified</span>
-  `;
+  const score = aiData && aiData.validation ? aiData.validation.credentialScore || 90 : 90;
+  const themeName = aiData && aiData.theme ? aiData.theme.name || 'Classic' : 'Classic';
+  bar.innerHTML =
+    '<span style="color:rgba(255,255,255,0.4);font-size:11px;letter-spacing:2px;text-transform:uppercase;">AI Generated</span>' +
+    '<span class="ai-tag theme">🎨 ' + themeName + '</span>' +
+    '<span class="ai-tag score">⭐ ' + score + '/100 Credential Score</span>' +
+    '<span class="ai-tag valid">✅ Verified</span>';
 
-  // Inject into iframe
+  // Point iframe to server-rendered URL (NOT a blob URL)
+  // This lets Google Fonts load and avoids CSP/cross-origin issues
   const iframe = document.getElementById('certIframe');
   iframe.style.height = '0';
-  iframe.style.paddingBottom = '';
 
-  // Write HTML to iframe
-  const blob = new Blob([html], { type: 'text/html' });
-  const url  = URL.createObjectURL(blob);
-  iframe.src = url;
-
-  iframe.onload = () => {
-    // Set iframe height based on content (A4 landscape ratio)
-    const wrapper = document.querySelector('.cert-wrapper');
-    const w = wrapper.clientWidth;
-    // A4 landscape: 297mm × 210mm → ratio 0.707
+  iframe.onload = function() {
+    var wrapper = document.querySelector('.cert-wrapper');
+    var w = wrapper ? wrapper.clientWidth : 800;
     iframe.style.height = Math.round(w * 0.707) + 'px';
   };
+
+  iframe.src = '/cert/' + certId;
 
   // Reset email form
   document.getElementById('emailForm').style.display = 'none';
@@ -97,31 +90,31 @@ function renderCertificate(data) {
 // DOWNLOAD PDF
 // ─────────────────────────────────────────────
 async function downloadPDF() {
-  if (!currentCertHtml) { showToast('Generate a certificate first.'); return; }
+  if (!currentCertId) { showToast('Generate a certificate first.'); return; }
 
-  showToast('📄 Generating PDF…');
+  showToast('Generating PDF...');
   try {
     const res = await fetch('/api/download-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html: currentCertHtml })
+      body: JSON.stringify({ certId: currentCertId })
     });
 
     if (!res.ok) {
-      const d = await res.json();
+      const d = await res.json().catch(() => ({}));
       throw new Error(d.error || 'PDF failed');
     }
 
-    const blob  = await res.blob();
-    const url   = URL.createObjectURL(blob);
-    const a     = document.createElement('a');
-    a.href      = url;
-    a.download  = 'certificate.pdf';
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'certificate.pdf';
     a.click();
     URL.revokeObjectURL(url);
-    showToast('✅ PDF downloaded!');
+    showToast('PDF downloaded!');
   } catch (err) {
-    showToast('❌ ' + err.message);
+    showToast('Failed: ' + err.message);
   }
 }
 
@@ -145,7 +138,7 @@ async function sendEmailConfirm() {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast('Invalid email address.'); return; }
 
   const statusEl = document.getElementById('emailStatus');
-  statusEl.textContent = 'Sending…';
+  statusEl.textContent = 'Sending...';
 
   try {
     const res  = await fetch('/api/send-email', {
@@ -155,41 +148,41 @@ async function sendEmailConfirm() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to send');
-    statusEl.textContent = '✅ Email sent to ' + email;
-    showToast('📧 Certificate emailed successfully!');
+    statusEl.textContent = 'Email sent to ' + email;
+    showToast('Certificate emailed successfully!');
     document.getElementById('emailForm').style.display = 'none';
   } catch (err) {
-    statusEl.textContent = '❌ ' + err.message;
-    showToast('❌ ' + err.message);
+    statusEl.textContent = 'Error: ' + err.message;
+    showToast('Failed: ' + err.message);
   }
 }
 
 // ─────────────────────────────────────────────
-// VERIFY
+// VERIFY — opens /verify/:id page in new tab
 // ─────────────────────────────────────────────
 function openVerify() {
-  if (!currentVerifyUrl) { showToast('Generate a certificate first.'); return; }
-  window.open(currentVerifyUrl, '_blank');
+  if (!currentCertId) { showToast('Generate a certificate first.'); return; }
+  window.open('/verify/' + currentCertId, '_blank');
 }
 
 // ─────────────────────────────────────────────
 // LOADING OVERLAY
 // ─────────────────────────────────────────────
 function showOverlay(text) {
-  let el = document.getElementById('loadingOverlay');
+  var el = document.getElementById('loadingOverlay');
   if (!el) {
     el = document.createElement('div');
     el.id = 'loadingOverlay';
     el.className = 'loading-overlay';
-    el.innerHTML = `<div class="loading-spinner"></div><p class="loading-text" id="overlayText"></p>`;
+    el.innerHTML = '<div class="loading-spinner"></div><p class="loading-text" id="overlayText"></p>';
     document.body.appendChild(el);
   }
-  document.getElementById('overlayText').textContent = text || 'Loading…';
+  document.getElementById('overlayText').textContent = text || 'Loading...';
   el.style.display = 'flex';
 }
 
 function hideOverlay() {
-  const el = document.getElementById('loadingOverlay');
+  var el = document.getElementById('loadingOverlay');
   if (el) el.style.display = 'none';
 }
 
@@ -198,32 +191,42 @@ function hideOverlay() {
 // ─────────────────────────────────────────────
 function setLoading(loading, btn) {
   btn.disabled = loading;
-  document.querySelector('.btn-text').style.display = loading ? 'none' : 'inline';
-  document.querySelector('.btn-icon').style.display = loading ? 'none' : 'inline';
-  document.getElementById('btnLoader').style.display = loading ? 'inline' : 'none';
+  var txt = document.querySelector('.btn-text');
+  var ico = document.querySelector('.btn-icon');
+  var ldr = document.getElementById('btnLoader');
+  if (txt) txt.style.display = loading ? 'none' : 'inline';
+  if (ico) ico.style.display = loading ? 'none' : 'inline';
+  if (ldr) ldr.style.display = loading ? 'inline' : 'none';
 }
 
 function showError(msg) {
-  const el = document.getElementById('errorBox');
+  var el = document.getElementById('errorBox');
+  if (!el) return;
   el.textContent = msg;
   el.style.display = 'block';
 }
 
 function hideError() {
-  document.getElementById('errorBox').style.display = 'none';
+  var el = document.getElementById('errorBox');
+  if (el) el.style.display = 'none';
 }
 
 function showToast(msg) {
-  const el = document.getElementById('toast');
+  var el = document.getElementById('toast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3500);
+  setTimeout(function() { el.classList.remove('show'); }, 3500);
 }
 
 // Set default date to today
-document.getElementById('completionDate').valueAsDate = new Date();
+var dateInput = document.getElementById('completionDate');
+if (dateInput) dateInput.valueAsDate = new Date();
 
-// Allow pressing Enter in last text field to trigger generate
-document.getElementById('recipientEmail').addEventListener('keydown', e => {
-  if (e.key === 'Enter') generateCertificate();
-});
+// Press Enter in email field to generate
+var emailField = document.getElementById('recipientEmail');
+if (emailField) {
+  emailField.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') generateCertificate();
+  });
+}
