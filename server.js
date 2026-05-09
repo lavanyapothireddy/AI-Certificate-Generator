@@ -3,7 +3,7 @@ const express = require('express');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
-const Anthropic = require('@anthropic-ai/sdk');
+const Groq = require('groq-sdk');
 const nodemailer = require('nodemailer');
 const htmlPdfNode = require('html-pdf-node');
 
@@ -11,7 +11,7 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // In-memory store for issued certificates (use a DB in production)
 const certificateStore = new Map();
@@ -69,15 +69,15 @@ Return ONLY a valid JSON object (no markdown, no backticks) with these exact fie
   }
 }`;
 
-    const aiResponse = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+    const aiResponse = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 1000,
       messages: [{ role: 'user', content: aiPrompt }]
     });
 
     let aiData;
     try {
-      const rawText = aiResponse.content.map(b => b.text || '').join('');
+      const rawText = aiResponse.choices[0]?.message?.content || '';
       const clean = rawText.replace(/```json|```/g, '').trim();
       aiData = JSON.parse(clean);
     } catch {
