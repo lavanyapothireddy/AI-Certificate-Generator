@@ -5,7 +5,8 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const Groq = require('groq-sdk');
 const nodemailer = require('nodemailer');
-const htmlPdfNode = require('html-pdf-node');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -142,21 +143,31 @@ app.post('/api/download-pdf', async (req, res) => {
     const { html } = req.body;
     if (!html) return res.status(400).json({ error: 'No HTML provided.' });
 
-    const file = { content: html };
-    const options = {
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
       format: 'A4',
       landscape: true,
       printBackground: true,
       margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
-    };
+    });
 
-    const pdfBuffer = await htmlPdfNode.generatePdf(file, options);
+    await browser.close();
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="certificate.pdf"');
     res.send(pdfBuffer);
   } catch (err) {
     console.error('PDF error:', err);
-    res.status(500).json({ error: 'Failed to generate PDF.' });
+    res.status(500).json({ error: 'Failed to generate PDF: ' + err.message });
   }
 });
 
