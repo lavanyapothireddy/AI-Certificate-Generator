@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const Groq = require('groq-sdk');
 const PDFDocument = require('pdfkit');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -339,7 +340,6 @@ app.post('/api/send-email', async (req, res) => {
 
     // ── Option B: Gmail SMTP (nodemailer) ──
     if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
-      const nodemailer = require('nodemailer');
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
