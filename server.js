@@ -43,27 +43,41 @@ app.post('/api/generate', async (req, res) => {
 - Date: ${completionDate || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
 - Certificate ID: ${certId.slice(0, 8).toUpperCase()}
 
+IMPORTANT DESIGN RULES:
+- Use ONLY soft, elegant, professional color palettes. NO bright yellow, neon, or loud colors.
+- The background must be a very light cream, off-white, soft ivory, or light pastel — never white or dark.
+- The primary/accent color must be rich and muted: deep navy, forest green, burgundy, slate blue, warm brown, deep teal, or dark emerald.
+- Body text must be dark (near-black) for readability.
+- Choose from these approved theme styles:
+  * "Navy & Ivory" — primary #1e2a4a, accent #b8966e, bg: linear-gradient(135deg, #f8f5ef 0%, #ede8dc 100%)
+  * "Forest Prestige" — primary #1e3a2f, accent #8faf6e, bg: linear-gradient(135deg, #f5f8f0 0%, #e8f0e0 100%)
+  * "Burgundy Classic" — primary #5c1a2e, accent #c9956e, bg: linear-gradient(135deg, #fdf5f0 0%, #f5e8e0 100%)
+  * "Slate & Silver" — primary #2c3e50, accent #7f8c9e, bg: linear-gradient(135deg, #f4f6f8 0%, #e8ecf0 100%)
+  * "Deep Teal" — primary #0d3d56, accent #5a9eb5, bg: linear-gradient(135deg, #f0f7fa 0%, #ddeef5 100%)
+  * "Warm Bronze" — primary #3d2b1f, accent #a0714f, bg: linear-gradient(135deg, #fdf7f0 0%, #f0e6d8 100%)
+  * You may also create your own elegant variation following the same rules.
+
 Return ONLY a valid JSON object (no markdown, no backticks) with these exact fields:
 {
   "headline": "short congratulatory headline (max 8 words)",
-  "body": "2-3 sentence formal certificate body text mentioning the recipient, course, and achievement",
-  "tagline": "inspiring one-liner about learning or achievement",
+  "body": "1-2 sentence formal certificate body text. Do NOT mention the certificate ID in the body.",
+  "tagline": "inspiring one-liner about learning (max 12 words)",
   "theme": {
-    "name": "theme name (e.g. Royal Gold, Ocean Deep, Forest Prestige, Crimson Elite)",
-    "primaryColor": "#hex",
+    "name": "theme name",
+    "primaryColor": "#hex — dark, rich color",
     "secondaryColor": "#hex",
-    "accentColor": "#hex",
-    "textColor": "#hex",
-    "bgGradient": "CSS linear-gradient(...)",
-    "borderStyle": "describe the border style: ornate/minimal/geometric/classic",
+    "accentColor": "#hex — warm muted accent",
+    "textColor": "#hex — must be dark for readability",
+    "bgGradient": "CSS linear-gradient using soft light colors",
+    "borderStyle": "ornate or classic",
     "fontPair": {
-      "heading": "Google Font name for headings",
-      "body": "Google Font name for body text"
+      "heading": "Cormorant Garamond",
+      "body": "Lato"
     }
   },
   "validation": {
     "isValid": true,
-    "credentialScore": 85,
+    "credentialScore": 88,
     "notes": "brief credential validation note"
   }
 }`;
