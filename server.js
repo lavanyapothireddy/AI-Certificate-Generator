@@ -4,7 +4,6 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const Groq = require('groq-sdk');
-const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
 
 const app = express();
@@ -286,7 +285,7 @@ app.post('/api/download-pdf', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// Send Email
+// Send Email via Resend (free, no SMTP config)
 // ─────────────────────────────────────────────
 app.post('/api/send-email', async (req, res) => {
   try {
@@ -294,48 +293,89 @@ app.post('/api/send-email', async (req, res) => {
     const cert = certificateStore.get(certId);
     if (!cert) return res.status(404).json({ error: 'Certificate not found.' });
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      return res.status(503).json({ error: 'Email not configured. Set EMAIL_USER and EMAIL_PASS in environment.' });
+    const toEmail = recipientEmail || cert.recipientEmail;
+    if (!toEmail) return res.status(400).json({ error: 'No recipient email provided.' });
+
+    const RESEND_KEY = process.env.RESEND_API_KEY;
+    const EMAIL_FROM = process.env.EMAIL_FROM || 'CertAI <onboarding@resend.dev>';
+
+    if (!RESEND_KEY) {
+      return res.status(503).json({ error: 'Email not configured. Add RESEND_API_KEY in Render environment variables. Get a free key at resend.com' });
     }
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.EMAIL_PORT) || 587,
-      secure: false,
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-    });
-
     const emailHtml = `
-      <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background: #fdfbf0;">
-        <h1 style="color: #1a1a2e; text-align: center;">🏆 Your Certificate is Ready!</h1>
-        <p style="color: #333; font-size: 16px;">Dear <strong>${cert.recipientName}</strong>,</p>
-        <p style="color: #555; font-size: 15px; line-height: 1.6;">
-          Congratulations on completing <strong>${cert.courseName}</strong>! 
-          Your AI-generated certificate has been created and is ready for download.
-        </p>
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="${cert.verifyUrl}" 
-             style="background: #1a1a2e; color: #c9a84c; padding: 14px 32px; text-decoration: none; border-radius: 4px; font-size: 16px; display: inline-block;">
-            🔍 Verify Certificate
-          </a>
-        </div>
-        <p style="color: #888; font-size: 13px; text-align: center;">
-          Certificate ID: <strong>${certId.slice(0, 8).toUpperCase()}</strong><br>
-          Issued: ${new Date(cert.issuedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
-        <hr style="border: 1px solid #e0d0b0; margin: 20px 0;">
-        <p style="color: #aaa; font-size: 12px; text-align: center;">AI Certificate Generator · Powered by Anthropic Claude</p>
-      </div>
-    `;
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f1eb;font-family:Georgia,serif;">
+  <div style="max-width:580px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      to: recipientEmail || cert.recipientEmail,
-      subject: `🏆 Your Certificate for "${cert.courseName}" is Ready!`,
-      html: emailHtml
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1a1a2e,#2d2d4e);padding:40px 40px 32px;text-align:center;">
+      <p style="color:#c9a84c;font-size:11px;letter-spacing:4px;text-transform:uppercase;margin:0 0 12px;">AI Certificate Generator</p>
+      <h1 style="color:#fff;font-size:28px;margin:0;font-weight:700;">🏆 Certificate Issued!</h1>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:40px;">
+      <p style="color:#333;font-size:16px;margin:0 0 8px;">Dear <strong>${cert.recipientName}</strong>,</p>
+      <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 24px;">
+        Congratulations on successfully completing <strong>"${cert.courseName}"</strong>!
+        Your AI-generated certificate has been issued and is ready to view, download, and share.
+      </p>
+
+      <!-- Certificate details card -->
+      <div style="background:#fdfbf5;border:1px solid #e8dfc8;border-radius:8px;padding:20px 24px;margin:0 0 28px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:7px 0;color:#888;font-size:13px;width:140px;">Recipient</td><td style="padding:7px 0;color:#1a1a2e;font-size:13px;font-weight:700;">${cert.recipientName}</td></tr>
+          <tr><td style="padding:7px 0;color:#888;font-size:13px;">Course</td><td style="padding:7px 0;color:#1a1a2e;font-size:13px;font-weight:700;">${cert.courseName}</td></tr>
+          <tr><td style="padding:7px 0;color:#888;font-size:13px;">Issued</td><td style="padding:7px 0;color:#1a1a2e;font-size:13px;">${new Date(cert.issuedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</td></tr>
+          <tr><td style="padding:7px 0;color:#888;font-size:13px;">Certificate ID</td><td style="padding:7px 0;color:#c9a84c;font-size:13px;font-weight:700;">${certId.slice(0,8).toUpperCase()}</td></tr>
+        </table>
+      </div>
+
+      <!-- CTA -->
+      <div style="text-align:center;margin:0 0 28px;">
+        <a href="${cert.verifyUrl}"
+           style="display:inline-block;background:#1a1a2e;color:#c9a84c;text-decoration:none;padding:14px 36px;border-radius:6px;font-size:15px;font-weight:700;letter-spacing:0.5px;">
+          🔍 View &amp; Verify Certificate
+        </a>
+      </div>
+
+      <p style="color:#aaa;font-size:12px;text-align:center;margin:0;">
+        This certificate was generated and verified by AI Certificate Generator.<br>
+        The QR code on your certificate links directly to this verification page.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8f5ee;padding:20px 40px;text-align:center;border-top:1px solid #ede8d8;">
+      <p style="color:#bbb;font-size:11px;margin:0;">AI Certificate Generator · Powered by Groq &amp; LLaMA 3.3</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: [toEmail],
+        subject: `🏆 Your Certificate for "${cert.courseName}" — ${cert.recipientName}`,
+        html: emailHtml
+      })
     });
 
-    res.json({ success: true, message: `Email sent to ${recipientEmail || cert.recipientEmail}` });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.message || result.name || 'Resend API error');
+    }
+
+    res.json({ success: true, message: `Email sent to ${toEmail}` });
   } catch (err) {
     console.error('Email error:', err);
     res.status(500).json({ error: err.message || 'Failed to send email.' });
