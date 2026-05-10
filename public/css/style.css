@@ -282,16 +282,23 @@ body {
 .ai-tag.score { background: rgba(52,211,153,0.15); color: #34d399; }
 .ai-tag.valid { background: rgba(99,102,241,0.15); color: #818cf8; }
 
-/* Certificate iframe */
+/* Certificate iframe wrapper — uses padding-bottom trick for A4 landscape ratio */
 .cert-wrapper {
   border: 1px solid var(--border); border-radius: 8px;
   overflow: hidden; background: #f0ebe0;
+  position: relative;
+  width: 100%;
+  padding-bottom: 70.75%; /* A4 landscape: 793/1122 = 70.67% */
+  height: 0;
 }
 .cert-iframe {
-  width: 100%; height: 0;
-  border: none; display: block;
-  padding-bottom: 70.7%; /* A4 landscape ratio approximation */
-  /* We'll set actual height via JS */
+  position: absolute;
+  top: 0; left: 0;
+  width: 1122px;   /* cert native width */
+  height: 793px;   /* cert native height */
+  border: none;
+  transform-origin: top left;
+  /* JS will set transform: scale() */
 }
 
 /* Actions */
