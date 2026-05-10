@@ -21,7 +21,7 @@ const certificateStore = new Map();
 // ─────────────────────────────────────────────
 app.post('/api/generate', async (req, res) => {
   try {
-    const { recipientName, courseName, instructorName, completionDate, recipientEmail } = req.body;
+    const { recipientName, courseName, instructorName, completionDate, recipientEmail, userScore } = req.body;
     if (!recipientName || !courseName) {
       return res.status(400).json({ error: 'Recipient name and course name are required.' });
     }
@@ -114,6 +114,10 @@ Return ONLY a valid JSON object (no markdown, no backticks) with these exact fie
     }
 
     // 3. Build certificate HTML
+    const finalScore = (userScore && userScore >= 1 && userScore <= 100) ? parseInt(userScore) : (aiData.validation?.credentialScore || 90);
+    aiData.validation = aiData.validation || {};
+    aiData.validation.credentialScore = finalScore;
+
     const certHTML = buildCertificateHTML({
       recipientName, courseName, instructorName, completionDate,
       certId, qrDataUrl, verifyUrl, aiData
@@ -127,6 +131,7 @@ Return ONLY a valid JSON object (no markdown, no backticks) with these exact fie
       instructorName,
       completionDate,
       recipientEmail,
+      userScore: finalScore,
       issuedAt: new Date().toISOString(),
       aiData,
       html: certHTML,
@@ -693,32 +698,58 @@ function buildCertificateHTML({ recipientName, courseName, instructorName, compl
 function verifyPageHTML(cert) {
   if (!cert) {
     return `<!DOCTYPE html><html><head><title>Verification Failed</title>
-    <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fdf6f0;margin:0;}
-    .box{text-align:center;padding:60px;background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.08);}
-    h1{color:#c0392b;font-size:28px;}p{color:#666;margin-top:12px;}</style></head>
-    <body><div class="box"><h1>❌ Certificate Not Found</h1><p>This certificate ID is invalid or has expired.</p></div></body></html>`;
+    <style>body{font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f1eb;margin:0;}
+    .box{text-align:center;padding:60px;background:#fff;border-radius:16px;box-shadow:0 4px 32px rgba(0,0,0,0.1);max-width:440px;}
+    h1{color:#c0392b;font-size:26px;margin-bottom:12px;}p{color:#888;font-size:15px;line-height:1.6;}</style></head>
+    <body><div class="box"><div style="font-size:52px;margin-bottom:16px;">❌</div><h1>Certificate Not Found</h1><p>This certificate ID is invalid or has expired.</p></div></body></html>`;
   }
   const t = cert.aiData?.theme;
-  return `<!DOCTYPE html><html><head><title>Certificate Verified ✅</title>
-  <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:${t?.bgGradient||'#fdf6f0'};margin:0;}
-  .box{text-align:center;padding:60px 80px;background:rgba(255,255,255,0.9);border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,0.12);max-width:560px;}
-  .badge{font-size:56px;margin-bottom:16px;}
-  h1{color:${t?.primaryColor||'#1a1a2e'};font-size:28px;margin-bottom:8px;}
-  .score{display:inline-block;background:${t?.accentColor||'#c9a84c'};color:#fff;padding:6px 18px;border-radius:20px;font-size:14px;font-weight:700;margin:12px 0;}
-  .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee;font-size:15px;}
-  .label{color:#888;font-weight:600;}
-  .value{color:${t?.primaryColor||'#1a1a2e'};font-weight:700;text-align:right;}
-  .notes{margin-top:20px;font-size:13px;color:#666;font-style:italic;}
-  </style></head>
-  <body><div class="box">
-    <div class="badge">✅</div>
+  const primary = t?.primaryColor || '#1e2a4a';
+  const accent = t?.accentColor || '#b8966e';
+  const bg = t?.bgGradient || 'linear-gradient(135deg,#f8f5ef 0%,#ede8dc 100%)';
+  const score = cert.userScore || cert.aiData?.validation?.credentialScore || 90;
+  const issued = new Date(cert.issuedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  return `<!DOCTYPE html>
+<html><head><title>Certificate Verified ✅</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:${bg};padding:24px;}
+  .card{background:#fff;border-radius:20px;box-shadow:0 8px 48px rgba(0,0,0,0.12);max-width:480px;width:100%;overflow:hidden;}
+  .card-header{background:linear-gradient(135deg,${primary},${primary}dd);padding:36px 40px;text-align:center;}
+  .check{font-size:52px;display:block;margin-bottom:12px;}
+  .card-header h1{font-family:'Cormorant Garamond',serif;color:#fff;font-size:30px;font-weight:700;margin-bottom:6px;}
+  .card-header p{color:rgba(255,255,255,0.6);font-size:13px;letter-spacing:1px;}
+  .score-badge{display:inline-block;background:${accent};color:#fff;font-weight:700;font-size:15px;padding:8px 24px;border-radius:100px;margin-top:16px;}
+  .card-body{padding:32px 40px;}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid #f0ece4;}
+  .row:last-child{border-bottom:none;}
+  .label{color:#aaa;font-size:13px;font-weight:500;letter-spacing:0.3px;}
+  .value{color:${primary};font-size:14px;font-weight:600;text-align:right;max-width:260px;}
+  .cert-id{font-family:monospace;background:#f5f5f5;padding:3px 10px;border-radius:6px;font-size:13px;letter-spacing:1px;}
+  .card-footer{background:#fdfbf5;border-top:1px solid #f0ece4;padding:18px 40px;text-align:center;}
+  .card-footer p{color:#bbb;font-size:11px;letter-spacing:0.5px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <span class="check">✅</span>
     <h1>Certificate Verified</h1>
-    <div class="score">Credential Score: ${cert.aiData?.validation?.credentialScore || 90}/100</div>
+    <p>This certificate is authentic and valid</p>
+    <div class="score-badge">⭐ Score: ${score}/100</div>
+  </div>
+  <div class="card-body">
     <div class="row"><span class="label">Recipient</span><span class="value">${cert.recipientName}</span></div>
     <div class="row"><span class="label">Course</span><span class="value">${cert.courseName}</span></div>
-    <div class="row"><span class="label">Issued</span><span class="value">${new Date(cert.issuedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</span></div>
-    <div class="row"><span class="label">Certificate ID</span><span class="value">${cert.id.slice(0,8).toUpperCase()}</span></div>
-    <div class="row"><span class="label">Theme</span><span class="value">${cert.aiData?.theme?.name||'Classic'}</span></div>
-    <p class="notes">${cert.aiData?.validation?.notes || 'This certificate has been verified as authentic.'}</p>
-  </div></body></html>`;
+    <div class="row"><span class="label">Instructor</span><span class="value">${cert.instructorName || 'The Instructor'}</span></div>
+    <div class="row"><span class="label">Issued</span><span class="value">${issued}</span></div>
+    <div class="row"><span class="label">Certificate ID</span><span class="value"><span class="cert-id">${cert.id.slice(0,8).toUpperCase()}</span></span></div>
+  </div>
+  <div class="card-footer">
+    <p>AI Certificate Generator · Powered by Groq &amp; LLaMA 3.3</p>
+  </div>
+</div>
+</body></html>`;
 }
