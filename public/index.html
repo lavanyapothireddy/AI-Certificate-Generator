@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
-  <!-- HEADER -->
   <header class="header">
     <div class="header-inner">
       <div class="logo">
@@ -25,17 +24,16 @@
     </div>
   </header>
 
-  <!-- HERO -->
   <section class="hero">
     <div class="hero-bg-grid"></div>
     <div class="hero-content">
-      <div class="hero-badge">Powered by Claude AI</div>
+      <div class="hero-badge">Powered by Groq AI</div>
       <h1 class="hero-title">Generate <em>Stunning</em><br/>AI Certificates</h1>
       <p class="hero-sub">Every certificate is uniquely designed by AI — custom themes, verified credentials, instant PDF download & email delivery.</p>
       <a href="#generator" class="btn-hero">Create Your Certificate ↓</a>
     </div>
     <div class="hero-preview">
-      <div class="preview-card" id="heroPreviewCard">
+      <div class="preview-card">
         <div class="preview-shimmer"></div>
         <div class="preview-inner">
           <p class="preview-org">AI Certificate Generator</p>
@@ -47,7 +45,6 @@
     </div>
   </section>
 
-  <!-- HOW IT WORKS -->
   <section class="how-it-works" id="how-it-works">
     <div class="container">
       <h2 class="section-title">How It Works</h2>
@@ -55,13 +52,13 @@
         <div class="step">
           <div class="step-num">01</div>
           <h3>Fill the Form</h3>
-          <p>Enter recipient details, course name, instructor, and completion date.</p>
+          <p>Enter recipient details, course name, instructor, score and completion date.</p>
         </div>
         <div class="step-arrow">→</div>
         <div class="step">
           <div class="step-num">02</div>
           <h3>AI Designs</h3>
-          <p>Claude AI generates a unique certificate theme, content, and validates the credential.</p>
+          <p>Groq AI generates a unique certificate theme, content, and validates the credential.</p>
         </div>
         <div class="step-arrow">→</div>
         <div class="step">
@@ -73,12 +70,9 @@
     </div>
   </section>
 
-  <!-- GENERATOR -->
   <section class="generator-section" id="generator">
     <div class="container">
       <div class="generator-grid">
-
-        <!-- FORM PANEL -->
         <div class="form-panel">
           <h2 class="panel-title">Certificate Details</h2>
           <p class="panel-sub">Fill in the fields below — AI handles the rest.</p>
@@ -103,6 +97,13 @@
             <label for="recipientEmail">Recipient Email (for delivery)</label>
             <input type="email" id="recipientEmail" placeholder="e.g. jane@example.com" />
           </div>
+          <div class="form-group">
+            <label for="userScore">Course Score <span style="color:var(--muted);font-weight:400;font-size:12px;">(1–100, optional)</span></label>
+            <div style="position:relative;">
+              <input type="number" id="userScore" placeholder="e.g. 92" min="1" max="100" style="padding-right:52px;" />
+              <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;">/ 100</span>
+            </div>
+          </div>
 
           <button class="btn-generate" id="generateBtn" onclick="generateCertificate()">
             <span class="btn-icon">✦</span>
@@ -113,7 +114,6 @@
           <div class="error-box" id="errorBox" style="display:none"></div>
         </div>
 
-        <!-- PREVIEW PANEL -->
         <div class="preview-panel" id="previewPanel">
           <div class="preview-placeholder" id="previewPlaceholder">
             <div class="placeholder-icon">✦</div>
@@ -121,28 +121,15 @@
           </div>
 
           <div class="cert-output" id="certOutput" style="display:none">
-            <!-- AI INFO BAR -->
             <div class="ai-info-bar" id="aiInfoBar"></div>
-
-            <!-- CERTIFICATE IFRAME -->
             <div class="cert-wrapper">
               <iframe id="certIframe" class="cert-iframe" title="Certificate Preview"></iframe>
             </div>
-
-            <!-- ACTIONS -->
             <div class="cert-actions">
-              <button class="btn-action btn-pdf" id="pdfBtn" onclick="downloadPDF()">
-                📄 Download PDF
-              </button>
-              <button class="btn-action btn-email" id="emailBtn" onclick="sendEmail()">
-                📧 Email Certificate
-              </button>
-              <button class="btn-action btn-verify" id="verifyBtn" onclick="openVerify()">
-                🔍 Verify
-              </button>
+              <button class="btn-action btn-pdf" onclick="downloadPDF()">📄 Download PDF</button>
+              <button class="btn-action btn-email" onclick="sendEmail()">📧 Email Certificate</button>
+              <button class="btn-action btn-verify" onclick="openVerify()">🔍 Verify</button>
             </div>
-
-            <!-- EMAIL FORM (hidden until clicked) -->
             <div class="email-form" id="emailForm" style="display:none">
               <input type="email" id="emailInput" placeholder="Enter recipient email" />
               <button onclick="sendEmailConfirm()" class="btn-send">Send ✉️</button>
@@ -150,16 +137,14 @@
             <div class="email-status" id="emailStatus"></div>
           </div>
         </div>
-
       </div>
     </div>
   </section>
 
-  <!-- TOAST -->
   <div class="toast" id="toast"></div>
 
   <footer class="footer">
-    <p>Built with ❤️ using <strong>Anthropic Claude</strong> · AI Certificate Generator</p>
+    <p>Built with ❤️ using <strong>Groq &amp; LLaMA 3.3</strong> · AI Certificate Generator</p>
   </footer>
 
   <script src="/js/app.js"></script>
