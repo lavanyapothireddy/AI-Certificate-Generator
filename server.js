@@ -387,159 +387,239 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ AI Certificate Generator running on port ${PORT}`));
 
 // ─────────────────────────────────────────────
-// HTML Builder
+// HTML Builder — fixed grid layout, no overlap
 // ─────────────────────────────────────────────
 function buildCertificateHTML({ recipientName, courseName, instructorName, completionDate, certId, qrDataUrl, verifyUrl, aiData }) {
   const theme = aiData.theme;
-  const date = completionDate || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const date = completionDate
+    ? new Date(completionDate + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const shortId = certId.slice(0, 8).toUpperCase();
   const headingFont = theme.fontPair?.heading || 'Playfair Display';
   const bodyFont = theme.fontPair?.body || 'Lato';
+  const accent = theme.accentColor || '#c9a84c';
+  const primary = theme.primaryColor || '#1a1a2e';
+  const textCol = theme.textColor || '#1a1a2e';
+  const score = aiData.validation?.credentialScore || 90;
+
+  // Keep body text SHORT — strip the cert ID sentence if AI included it
+  let bodyText = (aiData.body || `This certifies that ${recipientName} has successfully completed ${courseName} with distinction.`)
+    .replace(/\.\s*The certificate ID[^.]*\./gi, '.')
+    .replace(/certificate ID[^.]*\./gi, '')
+    .trim();
+  // Hard-truncate to 180 chars to prevent overflow
+  if (bodyText.length > 180) bodyText = bodyText.slice(0, bodyText.lastIndexOf(' ', 180)) + '.';
+
+  const tagline = (aiData.tagline || '').slice(0, 80);
+  const headline = (aiData.headline || 'Certificate of Achievement').slice(0, 50);
 
   const borderCSS = {
-    ornate: `8px double ${theme.accentColor}`,
-    minimal: `3px solid ${theme.accentColor}`,
-    geometric: `4px solid ${theme.primaryColor}`,
-    classic: `6px solid ${theme.accentColor}`
-  }[theme.borderStyle] || `6px solid ${theme.accentColor}`;
+    ornate: `6px double ${accent}`,
+    minimal: `3px solid ${accent}`,
+    geometric: `4px solid ${primary}`,
+    classic: `5px solid ${accent}`
+  }[theme.borderStyle] || `5px solid ${accent}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(headingFont)}:wght@400;700&family=${encodeURIComponent(bodyFont)}:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(headingFont)}:ital,wght@0,400;0,700;1,400&family=${encodeURIComponent(bodyFont)}:wght@400;600&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; }
-  .cert-page {
+  html, body { width: 1122px; height: 793px; overflow: hidden; }
+
+  /* ── Page & frame ── */
+  .page {
     width: 1122px; height: 793px;
     background: ${theme.bgGradient};
     display: flex; align-items: center; justify-content: center;
-    font-family: '${bodyFont}', sans-serif;
   }
-  .cert-frame {
-    width: 1042px; height: 713px;
+  .frame {
+    width: 1058px; height: 729px;
     border: ${borderCSS};
     position: relative;
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 40px 60px;
-    background: rgba(255,255,255,0.35);
-    backdrop-filter: blur(4px);
+    background: rgba(255,255,255,0.28);
   }
-  .corner {
-    position: absolute; width: 48px; height: 48px;
-    border-color: ${theme.accentColor}; border-style: solid;
-  }
-  .corner-tl { top: 10px; left: 10px; border-width: 3px 0 0 3px; }
-  .corner-tr { top: 10px; right: 10px; border-width: 3px 3px 0 0; }
-  .corner-bl { bottom: 10px; left: 10px; border-width: 0 0 3px 3px; }
-  .corner-br { bottom: 10px; right: 10px; border-width: 0 3px 3px 0; }
-  .cert-org {
-    font-family: '${headingFont}', serif;
-    font-size: 13px; font-weight: 700;
-    letter-spacing: 5px; text-transform: uppercase;
-    color: ${theme.accentColor}; margin-bottom: 8px;
-  }
-  .cert-divider {
-    width: 200px; height: 1px; background: ${theme.accentColor};
-    margin: 6px auto; opacity: 0.6;
-  }
-  .cert-title {
-    font-family: '${headingFont}', serif;
-    font-size: 38px; font-weight: 700;
-    color: ${theme.primaryColor}; margin: 10px 0 4px;
-    letter-spacing: 1px; text-align: center;
-  }
-  .cert-subtitle {
-    font-size: 13px; letter-spacing: 3px; text-transform: uppercase;
-    color: ${theme.secondaryColor}; opacity: 0.7;
-    margin-bottom: 14px;
-  }
-  .cert-presented {
-    font-size: 13px; color: ${theme.textColor}; opacity: 0.6;
-    letter-spacing: 1px; margin-bottom: 6px;
-  }
-  .cert-name {
-    font-family: '${headingFont}', serif;
-    font-size: 48px; color: ${theme.primaryColor};
-    font-weight: 700; margin: 4px 0 10px;
-    border-bottom: 2px solid ${theme.accentColor};
-    padding-bottom: 8px; text-align: center;
-  }
-  .cert-body {
-    font-size: 13.5px; line-height: 1.7; text-align: center;
-    color: ${theme.textColor}; max-width: 700px; margin: 0 auto 16px;
-    opacity: 0.85;
-  }
-  .cert-course {
-    font-family: '${headingFont}', serif;
-    font-size: 20px; color: ${theme.accentColor};
-    font-weight: 700; font-style: italic; margin-bottom: 6px;
-  }
-  .cert-tagline {
-    font-size: 11px; font-style: italic; letter-spacing: 1px;
-    color: ${theme.textColor}; opacity: 0.5; margin-top: 4px;
-  }
-  .cert-footer {
-    position: absolute; bottom: 24px; left: 60px; right: 60px;
-    display: flex; justify-content: space-between; align-items: flex-end;
-  }
-  .cert-sig { text-align: center; min-width: 160px; }
-  .sig-line { width: 160px; height: 1px; background: ${theme.primaryColor}; opacity: 0.4; margin: 0 auto 4px; }
-  .sig-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: ${theme.textColor}; opacity: 0.5; }
-  .sig-name { font-family: '${headingFont}', serif; font-size: 14px; font-weight: 700; color: ${theme.primaryColor}; }
-  .cert-qr { text-align: center; }
-  .cert-qr img { width: 80px; height: 80px; opacity: 0.85; }
-  .cert-qr p { font-size: 9px; letter-spacing: 1px; color: ${theme.textColor}; opacity: 0.4; margin-top: 3px; }
-  .cert-meta { text-align: center; }
-  .cert-meta p { font-size: 10px; color: ${theme.textColor}; opacity: 0.45; letter-spacing: 0.5px; }
-  .theme-badge {
-    position: absolute; top: 16px; right: 60px;
-    background: ${theme.accentColor}; color: ${theme.bgGradient.includes('#fff') ? '#1a1a2e' : '#fff'};
-    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+
+  /* ── Corner accents ── */
+  .c { position: absolute; width: 44px; height: 44px; border-color: ${accent}; border-style: solid; }
+  .c-tl { top: 8px; left: 8px;   border-width: 2px 0 0 2px; }
+  .c-tr { top: 8px; right: 8px;  border-width: 2px 2px 0 0; }
+  .c-bl { bottom: 8px; left: 8px;  border-width: 0 0 2px 2px; }
+  .c-br { bottom: 8px; right: 8px; border-width: 0 2px 2px 0; }
+
+  /* ── Theme badge ── */
+  .badge {
+    position: absolute; top: 14px; right: 52px;
+    background: ${accent}; color: #fff;
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase;
     padding: 3px 10px; font-weight: 700;
+  }
+
+  /* ── HEADER zone — fixed 110px ── */
+  .header {
+    height: 110px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding-top: 10px;
+    flex-shrink: 0;
+  }
+  .org {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 5px; text-transform: uppercase; color: ${accent};
+  }
+  .divider {
+    width: 180px; height: 1px; background: ${accent};
+    opacity: 0.5; margin: 7px 0;
+  }
+  .headline {
+    font-family: '${headingFont}', serif;
+    font-size: 32px; font-weight: 700; color: ${primary};
+    letter-spacing: 0.5px; text-align: center; line-height: 1.1;
+  }
+  .subtitle {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 10px; letter-spacing: 3.5px; text-transform: uppercase;
+    color: ${textCol}; opacity: 0.5; margin-top: 6px;
+  }
+
+  /* ── MIDDLE zone — fixed 380px — recipient + course + body ── */
+  .middle {
+    height: 380px; flex-shrink: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 0 80px;
+    gap: 0;
+  }
+  .presented {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 12px; color: ${textCol}; opacity: 0.55;
+    letter-spacing: 1.5px; margin-bottom: 6px;
+  }
+  .name {
+    font-family: '${headingFont}', serif;
+    font-size: 52px; color: ${primary}; font-weight: 700;
+    line-height: 1.1; text-align: center;
+    border-bottom: 2px solid ${accent};
+    padding-bottom: 10px; margin-bottom: 14px;
+  }
+  .body-text {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 12.5px; line-height: 1.65; text-align: center;
+    color: ${textCol}; opacity: 0.78;
+    max-width: 680px;
+    margin-bottom: 12px;
+  }
+  .course {
+    font-family: '${headingFont}', serif;
+    font-size: 22px; color: ${accent};
+    font-weight: 700; font-style: italic;
+    text-align: center; margin-bottom: 10px;
+  }
+  .tagline {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 10.5px; font-style: italic;
+    color: ${textCol}; opacity: 0.4; letter-spacing: 0.5px;
+    text-align: center;
+  }
+
+  /* ── FOOTER zone — fixed 110px ── */
+  .footer {
+    height: 110px; flex-shrink: 0;
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 0 52px 12px;
+    border-top: 1px solid ${accent}22;
+  }
+
+  /* Signature */
+  .sig { text-align: center; min-width: 170px; }
+  .sig-line { width: 160px; height: 1px; background: ${primary}; opacity: 0.25; margin: 0 auto 5px; }
+  .sig-name {
+    font-family: '${headingFont}', serif;
+    font-size: 14px; font-weight: 700; color: ${primary};
+  }
+  .sig-label {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: ${textCol}; opacity: 0.4; margin-top: 2px;
+  }
+
+  /* Meta */
+  .meta { text-align: center; }
+  .meta p {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 10px; color: ${textCol}; opacity: 0.45;
+    letter-spacing: 0.3px; line-height: 1.8;
+  }
+  .meta .score-pill {
+    display: inline-block;
+    background: ${accent}22; border: 1px solid ${accent}66;
+    color: ${accent}; font-weight: 700;
+    padding: 2px 10px; border-radius: 20px;
+    font-size: 10px; margin-top: 3px;
+  }
+
+  /* QR */
+  .qr { text-align: center; }
+  .qr img { width: 76px; height: 76px; display: block; margin: 0 auto; }
+  .qr p {
+    font-family: '${bodyFont}', sans-serif;
+    font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: ${textCol}; opacity: 0.35; margin-top: 4px;
   }
 </style>
 </head>
 <body>
-<div class="cert-page">
-  <div class="cert-frame">
-    <div class="corner corner-tl"></div>
-    <div class="corner corner-tr"></div>
-    <div class="corner corner-bl"></div>
-    <div class="corner corner-br"></div>
-    <div class="theme-badge">${theme.name}</div>
+<div class="page">
+  <div class="frame">
 
-    <p class="cert-org">AI Certificate Generator</p>
-    <div class="cert-divider"></div>
-    <h1 class="cert-title">${aiData.headline || 'Certificate of Achievement'}</h1>
-    <p class="cert-subtitle">Excellence · Knowledge · Achievement</p>
+    <!-- Corner accents -->
+    <div class="c c-tl"></div>
+    <div class="c c-tr"></div>
+    <div class="c c-bl"></div>
+    <div class="c c-br"></div>
+    <div class="badge">${theme.name}</div>
 
-    <p class="cert-presented">This certificate is proudly presented to</p>
-    <h2 class="cert-name">${recipientName}</h2>
+    <!-- HEADER -->
+    <div class="header">
+      <p class="org">AI Certificate Generator</p>
+      <div class="divider"></div>
+      <h1 class="headline">${headline}</h1>
+      <p class="subtitle">Excellence &nbsp;·&nbsp; Knowledge &nbsp;·&nbsp; Achievement</p>
+    </div>
 
-    <p class="cert-body">${aiData.body}</p>
-    <p class="cert-course">"${courseName}"</p>
-    <p class="cert-tagline">${aiData.tagline || ''}</p>
+    <!-- MIDDLE -->
+    <div class="middle">
+      <p class="presented">This certificate is proudly presented to</p>
+      <h2 class="name">${recipientName}</h2>
+      <p class="body-text">${bodyText}</p>
+      <p class="course">"${courseName}"</p>
+      ${tagline ? `<p class="tagline">${tagline}</p>` : ''}
+    </div>
 
-    <div class="cert-footer">
-      <div class="cert-sig">
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="sig">
         <div class="sig-line"></div>
         <p class="sig-name">${instructorName || 'The Instructor'}</p>
         <p class="sig-label">Instructor / Issuer</p>
       </div>
-      <div class="cert-meta">
-        <p>Date: ${date}</p>
-        <p>ID: ${shortId}</p>
-        <p>Credential Score: ${aiData.validation?.credentialScore || 90}/100</p>
+      <div class="meta">
+        <p>${date}</p>
+        <p>Certificate ID: ${shortId}</p>
+        <div class="score-pill">⭐ Score ${score}/100</div>
       </div>
-      <div class="cert-qr">
-        <img src="${qrDataUrl}" alt="Verify QR">
-        <p>SCAN TO VERIFY</p>
+      <div class="qr">
+        <img src="${qrDataUrl}" alt="Verify">
+        <p>Scan to Verify</p>
       </div>
     </div>
+
   </div>
 </div>
 </body>
