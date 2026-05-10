@@ -299,7 +299,7 @@ app.post('/api/download-pdf', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// Send Email via Resend (free, no SMTP config)
+// Send Email — supports Resend API + Gmail SMTP fallback
 // ─────────────────────────────────────────────
 app.post('/api/send-email', async (req, res) => {
   try {
@@ -310,35 +310,76 @@ app.post('/api/send-email', async (req, res) => {
     const toEmail = recipientEmail || cert.recipientEmail;
     if (!toEmail) return res.status(400).json({ error: 'No recipient email provided.' });
 
-    const RESEND_KEY = process.env.RESEND_API_KEY;
-    const EMAIL_FROM = process.env.EMAIL_FROM || 'CertAI <onboarding@resend.dev>';
+    const emailHtml = buildEmailHTML(cert, certId);
+    const subject = `🏆 Your Certificate for "${cert.courseName}" — ${cert.recipientName}`;
 
-    if (!RESEND_KEY) {
-      return res.status(503).json({ error: 'Email not configured. Add RESEND_API_KEY in Render environment variables. Get a free key at resend.com' });
+    // ── Option A: Resend API ──
+    if (process.env.RESEND_API_KEY) {
+      const from = process.env.EMAIL_FROM || 'CertAI <onboarding@resend.dev>';
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ from, to: [toEmail], subject, html: emailHtml })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        // Resend free plan restriction: can only send to verified email
+        if (result.name === 'validation_error' || (result.message && result.message.includes('verify'))) {
+          return res.status(403).json({
+            error: `Resend free plan only allows sending to your own verified email. To send to any recipient, verify a domain at resend.com/domains, or switch to Gmail SMTP by setting GMAIL_USER and GMAIL_PASS in environment variables.`
+          });
+        }
+        throw new Error(result.message || result.name || 'Resend API error');
+      }
+      return res.json({ success: true, message: `Email sent to ${toEmail}` });
     }
 
-    const emailHtml = `
-<!DOCTYPE html>
+    // ── Option B: Gmail SMTP (nodemailer) ──
+    if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+      const nodemailer = require('nodemailer');
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS }
+      });
+      await transporter.sendMail({
+        from: `CertAI <${process.env.GMAIL_USER}>`,
+        to: toEmail,
+        subject,
+        html: emailHtml
+      });
+      return res.json({ success: true, message: `Email sent to ${toEmail}` });
+    }
+
+    // ── Neither configured ──
+    return res.status(503).json({
+      error: 'Email not configured. Add either:\n• RESEND_API_KEY (resend.com) — verify a domain to send to any email\n• GMAIL_USER + GMAIL_PASS (Gmail App Password) — works immediately for any recipient'
+    });
+
+  } catch (err) {
+    console.error('Email error:', err);
+    res.status(500).json({ error: err.message || 'Failed to send email.' });
+  }
+});
+
+function buildEmailHTML(cert, certId) {
+  return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f1eb;font-family:Georgia,serif;">
   <div style="max-width:580px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-
-    <!-- Header -->
     <div style="background:linear-gradient(135deg,#1a1a2e,#2d2d4e);padding:40px 40px 32px;text-align:center;">
       <p style="color:#c9a84c;font-size:11px;letter-spacing:4px;text-transform:uppercase;margin:0 0 12px;">AI Certificate Generator</p>
       <h1 style="color:#fff;font-size:28px;margin:0;font-weight:700;">🏆 Certificate Issued!</h1>
     </div>
-
-    <!-- Body -->
     <div style="padding:40px;">
       <p style="color:#333;font-size:16px;margin:0 0 8px;">Dear <strong>${cert.recipientName}</strong>,</p>
       <p style="color:#555;font-size:15px;line-height:1.7;margin:0 0 24px;">
         Congratulations on successfully completing <strong>"${cert.courseName}"</strong>!
         Your AI-generated certificate has been issued and is ready to view, download, and share.
       </p>
-
-      <!-- Certificate details card -->
       <div style="background:#fdfbf5;border:1px solid #e8dfc8;border-radius:8px;padding:20px 24px;margin:0 0 28px;">
         <table style="width:100%;border-collapse:collapse;">
           <tr><td style="padding:7px 0;color:#888;font-size:13px;width:140px;">Recipient</td><td style="padding:7px 0;color:#1a1a2e;font-size:13px;font-weight:700;">${cert.recipientName}</td></tr>
@@ -347,54 +388,23 @@ app.post('/api/send-email', async (req, res) => {
           <tr><td style="padding:7px 0;color:#888;font-size:13px;">Certificate ID</td><td style="padding:7px 0;color:#c9a84c;font-size:13px;font-weight:700;">${certId.slice(0,8).toUpperCase()}</td></tr>
         </table>
       </div>
-
-      <!-- CTA -->
       <div style="text-align:center;margin:0 0 28px;">
-        <a href="${cert.verifyUrl}"
-           style="display:inline-block;background:#1a1a2e;color:#c9a84c;text-decoration:none;padding:14px 36px;border-radius:6px;font-size:15px;font-weight:700;letter-spacing:0.5px;">
+        <a href="${cert.verifyUrl}" style="display:inline-block;background:#1a1a2e;color:#c9a84c;text-decoration:none;padding:14px 36px;border-radius:6px;font-size:15px;font-weight:700;letter-spacing:0.5px;">
           🔍 View &amp; Verify Certificate
         </a>
       </div>
-
       <p style="color:#aaa;font-size:12px;text-align:center;margin:0;">
-        This certificate was generated and verified by AI Certificate Generator.<br>
-        The QR code on your certificate links directly to this verification page.
+        This certificate was generated by AI Certificate Generator.<br>
+        The QR code on the certificate links directly to this verification page.
       </p>
     </div>
-
-    <!-- Footer -->
     <div style="background:#f8f5ee;padding:20px 40px;text-align:center;border-top:1px solid #ede8d8;">
       <p style="color:#bbb;font-size:11px;margin:0;">AI Certificate Generator · Powered by Groq &amp; LLaMA 3.3</p>
     </div>
   </div>
 </body>
 </html>`;
-
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: [toEmail],
-        subject: `🏆 Your Certificate for "${cert.courseName}" — ${cert.recipientName}`,
-        html: emailHtml
-      })
-    });
-
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.message || result.name || 'Resend API error');
-    }
-
-    res.json({ success: true, message: `Email sent to ${toEmail}` });
-  } catch (err) {
-    console.error('Email error:', err);
-    res.status(500).json({ error: err.message || 'Failed to send email.' });
-  }
-});
+}
 
 // ─────────────────────────────────────────────
 // Serve Certificate HTML directly (fixes iframe blank screen)
