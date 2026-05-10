@@ -49,7 +49,8 @@ async function generateCertificate() {
 
 // ─────────────────────────────────────────────
 // RENDER CERTIFICATE IN IFRAME
-// Uses /cert/:id server route — fixes blank screen + Google Fonts loading
+// Uses /cert/:id server route — fixes blank screen & Google Fonts loading
+// Scales 1122×793 cert to fit the preview panel width
 // ─────────────────────────────────────────────
 function renderCertificate(data) {
   const { aiData, certId } = data;
@@ -68,18 +69,26 @@ function renderCertificate(data) {
     '<span class="ai-tag score">⭐ ' + score + '/100 Credential Score</span>' +
     '<span class="ai-tag valid">✅ Verified</span>';
 
-  // Point iframe to server-rendered URL (NOT a blob URL)
-  // This lets Google Fonts load and avoids CSP/cross-origin issues
-  const iframe = document.getElementById('certIframe');
-  iframe.style.height = '0';
+  // Scale the 1122×793 iframe to fit the wrapper width
+  var iframe = document.getElementById('certIframe');
 
-  iframe.onload = function() {
+  function applyScale() {
     var wrapper = document.querySelector('.cert-wrapper');
-    var w = wrapper ? wrapper.clientWidth : 800;
-    iframe.style.height = Math.round(w * 0.707) + 'px';
-  };
+    if (!wrapper) return;
+    var wrapperWidth = wrapper.getBoundingClientRect().width;
+    var scale = wrapperWidth / 1122;
+    iframe.style.transform = 'scale(' + scale + ')';
+  }
 
+  // Load the cert from server URL (not blob — allows Google Fonts)
   iframe.src = '/cert/' + certId;
+  iframe.onload = applyScale;
+
+  // Also re-scale on window resize
+  window.addEventListener('resize', applyScale);
+
+  // Apply immediately in case wrapper is already sized
+  setTimeout(applyScale, 50);
 
   // Reset email form
   document.getElementById('emailForm').style.display = 'none';
