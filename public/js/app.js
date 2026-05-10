@@ -14,6 +14,8 @@ async function generateCertificate() {
   const instructorName = document.getElementById('instructorName').value.trim();
   const completionDate = document.getElementById('completionDate').value;
   const recipientEmail = document.getElementById('recipientEmail').value.trim();
+  const userScoreRaw   = document.getElementById('userScore').value.trim();
+  const userScore      = userScoreRaw ? Math.min(100, Math.max(1, parseInt(userScoreRaw))) : null;
 
   hideError();
 
@@ -28,7 +30,7 @@ async function generateCertificate() {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipientName, courseName, instructorName, completionDate, recipientEmail })
+      body: JSON.stringify({ recipientName, courseName, instructorName, completionDate, recipientEmail, userScore })
     });
 
     const data = await res.json();
